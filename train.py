@@ -138,10 +138,7 @@ def train(model, train_loader, val_loader, criterion, optimizer, num_classes, ma
                 print(f"Best performance at epoch: {epoch + 1}, {best_dice:.4f} -> {dice:.4f}")
                 print(f"Save model in {model_dir}")
                 best_dice = dice
-                utils.save_model(model)
-
-
-
+                utils.save_model(model, file_name='fcn_resnet50_best_model.pt', model_dir=model_dir)
 
 def do_training(data_dir, model_dir, device, num_workers, output_dir, image_size,
                 input_size, batch_size, learning_rate, max_epoch, save_interval, seed, num_classes):
