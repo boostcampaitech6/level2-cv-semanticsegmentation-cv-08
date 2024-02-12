@@ -10,6 +10,7 @@ from sklearn.model_selection import GroupKFold
 # torch
 import torch
 from torch.utils.data import Dataset
+import torchvision.transforms as T
 
 CLASSES = [
     'finger-1', 'finger-2', 'finger-3', 'finger-4', 'finger-5',
@@ -39,6 +40,12 @@ class XRayDataset(Dataset):
             for fname in files
             if os.path.splitext(fname)[1].lower() == ".json"
         }
+
+        jsons_fn_prefix = {os.path.splitext(fname)[0] for fname in jsons}
+        pngs_fn_prefix = {os.path.splitext(fname)[0] for fname in pngs}
+
+        assert len(jsons_fn_prefix - pngs_fn_prefix) == 0
+        assert len(pngs_fn_prefix - jsons_fn_prefix) == 0
 
         # sort data
         pngs = sorted(pngs)
@@ -115,10 +122,9 @@ class XRayDataset(Dataset):
             class_label = np.zeros(image.shape[:2], dtype=np.uint8)
             cv2.fillPoly(class_label, [points], 1)
             label[..., class_ind] = class_label
-        
         if self.transforms is not None:
             inputs = {"image": image, "mask": label} if self.is_train else {"image": image}
-            result = self.transforms(**inputs)
+            result = self.transforms(image=inputs["image"], mask=inputs["mask"])
             
             image = result["image"]
             label = result["mask"] if self.is_train else label
