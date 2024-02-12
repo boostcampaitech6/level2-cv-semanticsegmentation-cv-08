@@ -12,16 +12,9 @@ import torch
 from torch.utils.data import Dataset
 import torchvision.transforms as T
 
-CLASSES = [
-    'finger-1', 'finger-2', 'finger-3', 'finger-4', 'finger-5',
-    'finger-6', 'finger-7', 'finger-8', 'finger-9', 'finger-10',
-    'finger-11', 'finger-12', 'finger-13', 'finger-14', 'finger-15',
-    'finger-16', 'finger-17', 'finger-18', 'finger-19', 'Trapezium',
-    'Trapezoid', 'Capitate', 'Hamate', 'Scaphoid', 'Lunate',
-    'Triquetrum', 'Pisiform', 'Radius', 'Ulna',
-]
-CLASS2IND = {v: i for i, v in enumerate(CLASSES)}
-IND2CLASS = {v: k for k, v in CLASS2IND.items()}
+from utils import class2ind
+
+CLASS2IND = class2ind()
 
 class XRayDataset(Dataset):
     def __init__(self, is_train=True, transforms=None, data_path='data/train'):
@@ -104,7 +97,7 @@ class XRayDataset(Dataset):
         label_path = os.path.join(self.json_path, label_name)
         
         # (H, W, NC) 모양의 label을 생성합니다.
-        label_shape = tuple(image.shape[:2]) + (len(CLASSES), )
+        label_shape = tuple(image.shape[:2]) + (29, )
         label = np.zeros(label_shape, dtype=np.uint8)
         
         # label 파일을 읽습니다.
