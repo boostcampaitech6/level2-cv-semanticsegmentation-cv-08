@@ -39,7 +39,7 @@ def test(model, data_loader, thr=0.5):
 
 model_path = "trained_models"
 model_name = "fcn_resnet50"
-model = torch.load(os.path.join(model_path, model_name, "_best_model.pt"))
+model = torch.load(os.path.join(model_path, f"{model_name}_best_model.pt"))
 
 tf = A.resize(512, 512)
 test_dataset = XRayInferenceDataset(transforms=tf)
