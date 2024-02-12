@@ -5,6 +5,7 @@ import torch
 import random
 import numpy as np
 import PIL as plt
+import pandas as pd
 
 
 CLASSES = [
@@ -35,7 +36,7 @@ def dice_coef(y_true, y_pred):
     eps = 0.0001
     return (2. * intersection + eps) / (torch.sum(y_true_f, -1) + torch.sum(y_pred_f, -1) + eps)
 
-def save_model(model, file_name='fcn_resnet50_best_model.pt', model_dir="models"):
+def save_model(model, file_name='fcn_resnet50_best_model.pt', model_dir="trained_models"):
     if not os.path.exists(model_dir):                                                           
         os.makedirs(model_dir)
     output_path = os.path.join(model_dir, file_name)
@@ -84,3 +85,35 @@ def save_image(data_path, saved_path, rles, filename_and_class):
     ax[0].imshow(image)
     ax[1].imshow(label2rgb(preds))
     cv2.imwrite(os.path.join(saved_path, 'inferenced_image'), ax)
+
+def encode_mask_to_rle(mask):
+    '''
+    mask: numpy array binary mask 
+    1 - mask 
+    0 - background
+    Returns encoded run length 
+    '''
+    pixels = mask.flatten()
+    pixels = np.concatenate([[0], pixels, [0]])
+    runs = np.where(pixels[1:] != pixels[:-1])[0] + 1
+    runs[1::2] -= runs[::2]
+    return ' '.join(str(x) for x in runs)
+
+def class2ind():
+    return {v: i for i, v in enumerate(CLASSES)}
+
+def ind2class():
+    return {v: k for k, v in class2ind().items()}
+
+def save_csv(rles, result, output_path):
+    classes, filename = zip(*[x.split("_") for x in result])
+    image_name = [os.path.basename(f) for f in filename]
+
+    df = pd.DataFrame({
+        "image_name": image_name,
+        "class": classes,
+        "rle": rles,
+    })
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
+    df.to_csv(os.path.join(output_path, "output.csv"), index=False)
