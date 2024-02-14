@@ -39,7 +39,7 @@ def test(model, data_loader, thr=0.5):
 
 model_path = "trained_models"
 model_name = "fcn_resnet50"
-test_path = "/data/ephemeral/home/data/test"
+test_path = "data/test"
 
 model = torch.load(os.path.join(model_path, f"{model_name}_best_model.pt"))
 
