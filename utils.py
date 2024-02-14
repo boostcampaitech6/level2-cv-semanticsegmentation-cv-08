@@ -26,7 +26,8 @@ PALETTE = [
     (0, 125, 92), (209, 0, 151), (188, 208, 182), (0, 220, 176),
 ]
 
-
+def get_classes():
+    return CLASSES
 
 def dice_coef(y_true, y_pred):
     y_true_f = y_true.flatten(2)
