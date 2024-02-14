@@ -1,7 +1,7 @@
 
 import os
 import torch
-import tqdm
+from tqdm.auto import tqdm
 import torch.nn.functional as F
 import albumentations as A
 from torch.utils.data import Dataset, DataLoader
