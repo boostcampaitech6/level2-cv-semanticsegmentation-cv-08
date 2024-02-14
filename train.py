@@ -58,7 +58,7 @@ def validation(epoch, model, data_loader, criterion, thr=0.5, num_classes=29):
 
     dices = []
     with torch.no_grad():
-        n_class = num_classes
+        n_class = utils.get_classes()
         total_loss = 0
         cnt = 0
 

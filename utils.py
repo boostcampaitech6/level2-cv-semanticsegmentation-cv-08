@@ -27,6 +27,9 @@ PALETTE = [
 ]
 
 
+def get_classes():
+    return CLASSES
+
 
 def dice_coef(y_true, y_pred):
     y_true_f = y_true.flatten(2)
