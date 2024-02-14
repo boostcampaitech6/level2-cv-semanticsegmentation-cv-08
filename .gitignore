@@ -24,7 +24,6 @@ model/*
 utils/__pycache__
 
 # exclude EDA folder (temporarily)
-EDA/
 eda.py
 
 # exclude results
@@ -36,6 +35,7 @@ output/
 *.txt
 !.gitmessage.txt
 *.ipynb
+!eda.ipynb
 *.tar
 *.gz
 
