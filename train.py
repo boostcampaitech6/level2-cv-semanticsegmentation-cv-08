@@ -23,7 +23,7 @@ import sys, os
 
 from models.models import get_model
 from models.losses import get_loss_function
-from models.optimziers import get_optimizer
+from models.optimizer import get_optimizer
 
 from modules.utils import load_yaml, save_yaml
 from modules.dataset import XRayDataset, XRayInferenceDataset
