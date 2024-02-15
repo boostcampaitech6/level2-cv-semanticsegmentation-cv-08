@@ -1,7 +1,7 @@
 
 import os
 import torch
-import tqdm
+from tqdm.auto import tqdm
 import torch.nn.functional as F
 import albumentations as A
 from torch.utils.data import Dataset, DataLoader
@@ -39,10 +39,12 @@ def test(model, data_loader, thr=0.5):
 
 model_path = "trained_models"
 model_name = "fcn_resnet50"
+test_path = "data/test"
+
 model = torch.load(os.path.join(model_path, f"{model_name}_best_model.pt"))
 
-tf = A.resize(512, 512)
-test_dataset = XRayInferenceDataset(transforms=tf)
+tf = A.Resize(512, 512)
+test_dataset = XRayInferenceDataset(transforms=tf, data_path=test_path)
 test_loader = DataLoader(
     dataset=test_dataset, 
     batch_size=2,
