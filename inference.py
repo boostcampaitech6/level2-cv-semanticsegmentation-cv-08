@@ -8,7 +8,7 @@ from torch.utils.data import Dataset, DataLoader
 
 import utils
 import model
-from dataset import XRayInferenceDataset
+from modules.dataset import XRayInferenceDataset
 
 def test(model, data_loader, thr=0.5):
     model = model.cuda()

@@ -2,8 +2,7 @@ import os
 import os.path as osp
 import time
 import math
-import datetime
-from datetime import timedelta
+from datetime import timedelta, datetime
 from argparse import ArgumentParser
 
 import numpy as np
@@ -19,40 +18,23 @@ from tqdm import tqdm
 from torchvision import transforms
 
 import utils
-from dataset import XRayDataset, XRayInferenceDataset
-from model import fcn_resnet50
+
+import sys, os
+
+from models.models import get_model
+from models.losses import get_loss_function
+from models.optimziers import get_optimizer
+
+from modules.utils import load_yaml, save_yaml
+from modules.dataset import XRayDataset, XRayInferenceDataset
+from modules.schedulers import get_scheduler
+from modules.transforms import get_transform_function
+
+prj_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(prj_dir)
 
 
-
-def parse_args():
-    parser = ArgumentParser()
-
-    # Conventional args
-    parser.add_argument('--data_dir', type=str,
-                        default='data/train')
-    parser.add_argument('--model_dir', type=str, default=os.environ.get('SM_MODEL_DIR',
-                                                                        'trained_models'))
-
-    parser.add_argument('--device', default='cuda' if cuda.is_available() else 'cpu')
-    parser.add_argument('--num_workers', type=int, default=8)
-    parser.add_argument('--output_dir', type=str, default='output')
-    parser.add_argument('--image_size', type=int, default=2048)
-    parser.add_argument('--input_size', type=int, default=512)
-    parser.add_argument('--batch_size', type=int, default=8)
-    parser.add_argument('--learning_rate', type=float, default=1e-3)
-    parser.add_argument('--max_epoch', type=int, default=150)
-    parser.add_argument('--save_interval', type=int, default=5)
-    parser.add_argument('--seed', default=47)
-    parser.add_argument('--num_classes', type=int, default=29)
-
-    args = parser.parse_args()
-
-    if args.input_size % 32 != 0:
-        raise ValueError('`input_size` must be a multiple of 32')
-
-    return args
-
-def validation(epoch, model, data_loader, criterion, thr=0.5, num_classes=29):
+def validation(epoch, model, data_loader, criterion, device, thr=0.5, num_classes=29):
     print(f'Start validation #{epoch:2d}')
     model.eval()
 
@@ -63,10 +45,10 @@ def validation(epoch, model, data_loader, criterion, thr=0.5, num_classes=29):
         cnt = 0
 
         for step, (images, masks) in tqdm(enumerate(data_loader), total=len(data_loader)):
-            images, masks = images.cuda(), masks.cuda()         
-            model = model.cuda()
+            images, masks = images.to(device), masks.to(device)        
+            model = model.to(device)
             
-            outputs = model(images)['out']
+            outputs = model(images)
             
             output_h, output_w = outputs.size(-2), outputs.size(-1)
             mask_h, mask_w = masks.size(-2), masks.size(-1)
@@ -99,97 +81,134 @@ def validation(epoch, model, data_loader, criterion, thr=0.5, num_classes=29):
     
     return avg_dice
 
-def train(model, train_loader, val_loader, criterion, optimizer, num_classes, max_epoch, model_dir):
-    print(f'Start training..')
-    
-    n_class = num_classes
-    best_dice = 0.
-    
-    for epoch in range(max_epoch):
-        model.train()
 
-        for step, (images, masks) in tqdm(enumerate(train_loader), total=len(train_loader)):            
-            # gpu 연산을 위해 device 할당합니다.
-            images, masks = images.cuda(), masks.cuda()
-            model = model.cuda()
-            
-            outputs = model(images)['out']
-            
-            # loss를 계산합니다.
-            loss = criterion(outputs, masks)
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            
-            # step 주기에 따라 loss를 출력합니다.
-            if (step + 1) % 25 == 0:
-                print(
-                    f'{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")} | '
-                    f'Epoch [{epoch+1}/{max_epoch}], '
-                    f'Step [{step+1}/{len(train_loader)}], '
-                    f'Loss: {round(loss.item(),4)}'
-                )
-             
-        # validation 주기에 따라 loss를 출력하고 best model을 저장합니다.
-        if (epoch + 1) % 20 == 0:
-            dice = validation(epoch + 1, model, val_loader, criterion, 0.5, n_class)
-            
-            if best_dice < dice:
-                print(f"Best performance at epoch: {epoch + 1}, {best_dice:.4f} -> {dice:.4f}")
-                print(f"Save model in {model_dir}")
-                best_dice = dice
-                utils.save_model(model, file_name='fcn_resnet50_best_model.pt', model_dir=model_dir)
+def do_training(config):
 
-def do_training(data_dir, model_dir, device, num_workers, output_dir, image_size,
-                input_size, batch_size, learning_rate, max_epoch, save_interval, seed, num_classes):
+    # Set train serial: ex) 20211004
+    train_serial = datetime.now().strftime("%Y%m%d_%H%M%S")
+    train_serial = 'debug' if config['debug'] else train_serial
+
+    # Create train result directory and set logger
+    train_result_dir = os.path.join(prj_dir, 'results', 'train', train_serial)
+    os.makedirs(train_result_dir, exist_ok=True)
     
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+    # Set device(GPU/CPU)
+    os.environ['CUDA_VISIBLE_DEVICES'] = str(config['gpu_num'])
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
     # set augmentation
-    transform = A.Compose([
-        A.Resize(input_size, input_size),
-    ])
+    transform = get_transform_function(config['transform'],config)
 
     train_dataset = XRayDataset(
         is_train=True,
         transforms=transform,
-        data_path=data_dir,
+        data_path="data/train",
     )
     valid_dataset = XRayDataset(
         is_train=True,
         transforms=transform,
-        data_path=data_dir,
+        data_path="data/train"
     )
     train_loader = DataLoader(
         train_dataset,
-        batch_size=batch_size,
+        batch_size=config['batch_size'],
         shuffle=True,
-        num_workers=num_workers,
+        num_workers=config['num_workers'],
         drop_last=True,
     )
     valid_loader = DataLoader(
         valid_dataset,
-        batch_size=batch_size,
+        batch_size=config['batch_size'],
         shuffle=True,
-        num_workers=num_workers,
+        num_workers=config['num_workers'],
         drop_last=False
     )
 
-    # seed 고정
-    utils.set_seed(seed)
 
-    model = fcn_resnet50()
+    model = get_model(model_str=config['architecture'])
+    model = model(classes=config['n_classes'],
+                encoder_name=config['encoder'],
+                encoder_weights=config['encoder_weight'],
+                activation=config['activation']
+                ,encoder_output_stride=config['stride']).to(device)
     model.to(device)
-    criterion = nn.BCEWithLogitsLoss()
-    optimizer = optim.Adam(params=model.parameters(), lr=learning_rate, weight_decay=1e-6)
+    
+    optimizer = get_optimizer(optimizer_str=config['optimizer']['name'])
+    optimizer = optimizer(model.parameters(), **config['optimizer']['args'])
+    
+    scheduler = get_scheduler(scheduler_str=config['scheduler']['name'])
+    scheduler = scheduler(optimizer=optimizer, **config['scheduler']['args'])
+    
+    criterion = get_loss_function(loss_function_str=config['loss']['name'])
+    criterion = criterion(**config['loss']['args'])
 
-    train(model, train_loader, valid_loader, criterion, optimizer, num_classes, max_epoch, model_dir)
 
-def main(args):
+    print(f'Start training..')
+    
+    n_class = config['n_classes']
+    best_dice = 0.
+    
+    for epoch in range(config['max_epoch']):
+        model.train()
+        epoch_loss = 0
+        for step, (images, masks) in tqdm(enumerate(train_loader), total=len(train_loader)):            
+            # gpu 연산을 위해 device 할당합니다.
+            images, masks = images.to(device), masks.to(device)
+            model = model.to(device)
+            
+            outputs = model(images)
+            
+            # loss를 계산합니다.
+            loss = criterion(outputs, masks)
+            epoch_loss += loss.item()
+            
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
 
+        train_loss = epoch_loss / len(train_loader)
+        print(train_loss)
+             
+        # validation 주기에 따라 loss를 출력하고 best model을 저장합니다.
+        
+        dice = validation(epoch + 1, model, valid_loader, criterion, device, 0.5, n_class)
+        
+        if best_dice < dice:
+            print(f"Best performance at epoch: {epoch + 1}, {best_dice:.4f} -> {dice:.4f}")
+            print(f"Save model in {train_result_dir}")
+            best_dice = dice
 
-    do_training(**args.__dict__)
+            check_point = {
+            'epoch': epoch + 1,
+            'model': model.state_dict(),
+            'optimizer': optimizer.state_dict(),
+            'scheduler': scheduler.state_dict() if scheduler else None
+            }
+        
+            torch.save(check_point,os.path.join(train_result_dir,f'model_{epoch}.pt'))
+            torch.save(check_point,os.path.join(train_result_dir,f'best_model.pt'))
+            early_stopping_count = 0
+        else:
+            early_stopping_count += 1
+        if early_stopping_count >= config['earlystopping_patience']:
+            exit()
+            
 
 
 if __name__ == '__main__':
-    args = parse_args()
-    main(args)
+    # Load config
+    config_path = os.path.join(prj_dir, 'config', 'train.yaml')
+    config = load_yaml(config_path)
+
+    # Set random seed, deterministic
+    torch.cuda.manual_seed(config['seed'])
+    torch.manual_seed(config['seed'])
+    np.random.seed(config['seed'])
+    random.seed(config['seed'])
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
+
+
+    do_training(config)
