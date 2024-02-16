@@ -12,9 +12,9 @@ import torch
 from torch.utils.data import Dataset
 import torchvision.transforms as T
 
-from utils import class2ind
+from modules import utils
 
-CLASS2IND = class2ind()
+CLASS2IND = utils.class2ind()
 
 class XRayDataset(Dataset):
     def __init__(self, is_train=True, transforms=None, data_path='data/train'):
@@ -116,11 +116,11 @@ class XRayDataset(Dataset):
             cv2.fillPoly(class_label, [points], 1)
             label[..., class_ind] = class_label
         if self.transforms is not None:
-            inputs = {"image": image, "mask": label} if self.is_train else {"image": image}
+            inputs = {"image": image, "mask": label}
             result = self.transforms(image=inputs["image"], mask=inputs["mask"])
             
             image = result["image"]
-            label = result["mask"] if self.is_train else label
+            label = result["mask"]
 
         # to tenser will be done later
         image = image.transpose(2, 0, 1)    # channel first 포맷으로 변경합니다.

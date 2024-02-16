@@ -1,0 +1,51 @@
+debug: True
+
+gpu_num : 1
+seed : 111
+batch_size: 8
+num_workers: 8
+
+
+
+#wandb
+wandb : False
+wandb_project: boostcamp_Project4_segmentation
+wandb_run : DeepLabV3Plus_timm-efficientnet-b4_imagenet_5_softmax_16_512_baseTransform_BCElogits_CosineAnnealingLR_20
+wandb_note : wandb_note
+
+#data
+data_dir : "data/train"
+image_size: 2048
+input_size: 512
+transform: baseTransform
+
+#model
+architecture : DeepLabV3Plus #Unet #FPN #DeepLabV3Plus #DeepLabV3 #UnetPlusPlus #PAN #MAnet #PSPNet
+model_args:
+  encoder_name: timm-efficientnet-b4 #timm-regnety_016
+  encoder_weights: imagenet #imagenet
+  encoder_depth: 5
+  activation:  #None은 blank #logsoftmax
+  encoder_output_stride: 16
+  classes: 29
+
+#train
+max_epoch: 200
+earlystopping_patience: 8
+optimizer:
+  name: AdamW
+  args:
+    lr: 5.0e-04
+    weight_decay: 5.0e-02
+
+scheduler:
+  name: CosineAnnealingLR
+  args:
+    T_max: 20
+    eta_min: 0
+
+loss:
+  name: bce_logits_loss
+  args:
+    weight: 0
+
