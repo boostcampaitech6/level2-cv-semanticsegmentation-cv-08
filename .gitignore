@@ -6,7 +6,7 @@ code/
 
 # exclude custom config files (only include base.yml)
 !config/
-config/*
+# config/*
 !config/base.yml
 !config/final.yml
 

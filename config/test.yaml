@@ -1,0 +1,7 @@
+gpu_num : 1
+
+train_serial : 'debug'
+
+test_dir: 'data/test'
+batch_size: 8
+num_workers: 8
