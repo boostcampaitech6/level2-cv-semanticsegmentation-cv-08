@@ -110,12 +110,12 @@ def do_training(config):
     train_dataset = XRayDataset(
         is_train=True,
         transforms=transform,
-        data_path="data/train",
+        data_path=config['data_dir'],
     )
     valid_dataset = XRayDataset(
         is_train=False,
         transforms=transform,
-        data_path="data/train"
+        data_path=config['data_dir']
     )
     train_loader = DataLoader(
         train_dataset,
