@@ -17,8 +17,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from torchvision import transforms
 
-import utils
-
+from modules import utils
 import sys, os
 
 from models.models import get_model
@@ -30,14 +29,20 @@ from modules.dataset import XRayDataset, XRayInferenceDataset
 from modules.schedulers import get_scheduler
 from modules.transforms import get_transform_function
 
+import segmentation_models_pytorch as smp
+
+from torchvision import models
+from torch import nn
+
+import wandb, shutil
+
 prj_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(prj_dir)
 
 
-def validation(epoch, model, data_loader, criterion, device, thr=0.5, num_classes=29):
+def validation(epoch, model, data_loader, criterion,device, thr=0.5, num_classes=29):
     print(f'Start validation #{epoch:2d}')
     model.eval()
-
     dices = []
     with torch.no_grad():
         n_class = utils.get_classes()
@@ -45,7 +50,7 @@ def validation(epoch, model, data_loader, criterion, device, thr=0.5, num_classe
         cnt = 0
 
         for step, (images, masks) in tqdm(enumerate(data_loader), total=len(data_loader)):
-            images, masks = images.to(device), masks.to(device)        
+            images, masks = images.to(device), masks.to(device)
             model = model.to(device)
             
             outputs = model(images)
@@ -75,11 +80,13 @@ def validation(epoch, model, data_loader, criterion, device, thr=0.5, num_classe
         for c, d in zip(n_class, dices_per_class)
     ]
     dice_str = "\n".join(dice_str)
+    dice_log = {c:d for c, d in zip(n_class, dices_per_class)}
     print(dice_str)
     
     avg_dice = torch.mean(dices_per_class).item()
     
-    return avg_dice
+    val_loss = total_loss / len(data_loader)
+    return avg_dice, dice_log, val_loss
 
 
 def do_training(config):
@@ -91,7 +98,7 @@ def do_training(config):
     # Create train result directory and set logger
     train_result_dir = os.path.join(prj_dir, 'results', 'train', train_serial)
     os.makedirs(train_result_dir, exist_ok=True)
-    
+    shutil.copy(config_path, os.path.join(train_result_dir,'train.yaml'))
 
     # Set device(GPU/CPU)
     os.environ['CUDA_VISIBLE_DEVICES'] = str(config['gpu_num'])
@@ -106,7 +113,7 @@ def do_training(config):
         data_path="data/train",
     )
     valid_dataset = XRayDataset(
-        is_train=True,
+        is_train=False,
         transforms=transform,
         data_path="data/train"
     )
@@ -127,12 +134,12 @@ def do_training(config):
 
 
     model = get_model(model_str=config['architecture'])
-    model = model(classes=config['n_classes'],
-                encoder_name=config['encoder'],
-                encoder_weights=config['encoder_weight'],
-                activation=config['activation']
-                ,encoder_output_stride=config['stride']).to(device)
-    model.to(device)
+    model = model(
+        **config['model_args']
+    ).to(device)
+    # model = fcn_resnet50()
+    # model = smp.Unet(classes=29)
+    wandb.watch(model)
     
     optimizer = get_optimizer(optimizer_str=config['optimizer']['name'])
     optimizer = optimizer(model.parameters(), **config['optimizer']['args'])
@@ -143,15 +150,18 @@ def do_training(config):
     criterion = get_loss_function(loss_function_str=config['loss']['name'])
     criterion = criterion(**config['loss']['args'])
 
-
+    # criterion = nn.BCEWithLogitsLoss()
+    # optimizer = optim.Adam(params=model.parameters(), lr=0.001, weight_decay=1e-6)
     print(f'Start training..')
     
-    n_class = config['n_classes']
+    n_class = config['model_args']['classes']
     best_dice = 0.
     
     for epoch in range(config['max_epoch']):
         model.train()
         epoch_loss = 0
+        epoch_lr = scheduler.get_lr()[0]
+
         for step, (images, masks) in tqdm(enumerate(train_loader), total=len(train_loader)):            
             # gpu 연산을 위해 device 할당합니다.
             images, masks = images.to(device), masks.to(device)
@@ -168,11 +178,19 @@ def do_training(config):
             optimizer.step()
 
         train_loss = epoch_loss / len(train_loader)
-        print(train_loss)
-             
-        # validation 주기에 따라 loss를 출력하고 best model을 저장합니다.
+
+        scheduler.step()
+        #Validation 계산
+        dice, dice_log, val_loss = validation(epoch + 1, model, valid_loader, criterion, device, 0.5, n_class)
         
-        dice = validation(epoch + 1, model, valid_loader, criterion, device, 0.5, n_class)
+        #log
+        dice_log['dice'] = dice
+        dice_log['learning rate'] = epoch_lr
+        dice_log['train loss'] = train_loss
+        dice_log['val loss'] = val_loss
+
+        
+        # validation 주기에 따라 loss를 출력하고 best model을 저장합니다.
         
         if best_dice < dice:
             print(f"Best performance at epoch: {epoch + 1}, {best_dice:.4f} -> {dice:.4f}")
@@ -193,13 +211,14 @@ def do_training(config):
             early_stopping_count += 1
         if early_stopping_count >= config['earlystopping_patience']:
             exit()
-            
-
+        
+        wandb.log(dice_log)
 
 if __name__ == '__main__':
     # Load config
     config_path = os.path.join(prj_dir, 'config', 'train.yaml')
     config = load_yaml(config_path)
+
 
     # Set random seed, deterministic
     torch.cuda.manual_seed(config['seed'])
@@ -208,6 +227,18 @@ if __name__ == '__main__':
     random.seed(config['seed'])
     torch.backends.cudnn.deterministic = True
     torch.backends.cudnn.benchmark = False
+
+    #wandb
+    if config['wandb']:
+        wandb.init(project=config["wandb_project"], config={
+                    "learning_rate": config['optimizer']['args']['lr'],
+                    "architecture": config['architecture'],
+                    "dataset": "HandBoneDataset",
+                    "notes":config['wandb_note']
+                    },
+                   name = config['wandb_run'])
+    else:
+        wandb.init(mode="disabled")
 
 
 

@@ -20,6 +20,9 @@ def get_model(model_str: str):
     elif model_str == 'DeepLabV3Plus':
         return smp.DeepLabV3Plus
     
+    elif model_str == 'DeepLabV3':
+        return smp.DeepLabV3
+    
     elif model_str == 'UnetPlusPlus':
         return smp.UnetPlusPlus
 
