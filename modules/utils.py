@@ -6,7 +6,8 @@ import random
 import numpy as np
 import PIL as plt
 import pandas as pd
-
+import wandb
+import matplotlib.pyplot as plt
 
 CLASSES = [
     'finger-1', 'finger-2', 'finger-3', 'finger-4', 'finger-5',
@@ -128,4 +129,24 @@ def save_yaml(path, obj):
 	with open(path, 'w') as f:
 
 		yaml.dump(obj, f, sort_keys=False)
-		
+          
+def visualize_and_log_images(images, masks, step, num_images_to_log=4):
+    num_images = len(images)
+    indices = np.random.choice(num_images, min(num_images_to_log, num_images), replace=False)
+    
+    for idx in indices:
+        image = images[idx]
+        mask = masks[idx]
+        
+        fig, ax = plt.subplots(1, 2, figsize=(12, 6))
+        ax[0].imshow(image)
+        ax[0].set_title("Image")
+        ax[0].axis("off")
+        
+        ax[1].imshow(mask, cmap='gray')
+        ax[1].set_title("Mask")
+        ax[1].axis("off")
+        
+        # 이미지와 마스크를 함께 WandB에 로깅
+        wandb.log({f"Image_{idx}": wandb.Image(fig)}, step=step)
+

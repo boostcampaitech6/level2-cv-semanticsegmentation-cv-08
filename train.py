@@ -24,7 +24,7 @@ from models.models import get_model
 from models.losses import get_loss_function
 from models.optimizer import get_optimizer
 
-from modules.utils import load_yaml, save_yaml
+from modules.utils import load_yaml, save_yaml, visualize_and_log_images
 from modules.dataset import XRayDataset, XRayInferenceDataset
 from modules.schedulers import get_scheduler
 from modules.transforms import get_transform_function
@@ -162,12 +162,15 @@ def do_training(config):
         epoch_loss = 0
         epoch_lr = scheduler.get_lr()[0]
 
-        for step, (images, masks) in tqdm(enumerate(train_loader), total=len(train_loader)):            
+        for step, (images, masks) in tqdm(enumerate(train_loader), total=len(train_loader)):   
             # gpu 연산을 위해 device 할당합니다.
             images, masks = images.to(device), masks.to(device)
             model = model.to(device)
             
             outputs = model(images)
+
+            # 데이터셋 변환 이후 시각화 및 WandB에 로깅
+            visualize_and_log_images(images, masks, step)  
             
             # loss를 계산합니다.
             loss = criterion(outputs, masks)
