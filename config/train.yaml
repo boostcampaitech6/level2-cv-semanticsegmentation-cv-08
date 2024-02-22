@@ -48,4 +48,3 @@ loss:
   name: bce_logits_loss
   args:
     weight: 0
-
